@@ -1,0 +1,94 @@
+📋 Contenido del Manual
+1. Introducción
+Aplicación para análisis táctico de fútbol en tiempo real con:
+
+Registro de eventos avanzado
+
+Generación automática de estadísticas
+
+Visualización profesional de datos
+
+2. Requisitos
+Docker instalado
+
+4GB RAM mínimo
+
+Navegador moderno (Chrome/Firefox)
+
+3. Instalación
+bash
+docker-compose up -d
+Acceder a: http://localhost:8501
+
+4. Guía Paso a Paso
+4.1 Pantalla "Partido en Vivo"
+![Diagrama de interfaz]
+
+Control de tiempo: Iniciar/pausar/ajustar minuto
+
+Selector de jugador: Filtra por equipo y nombre
+
+Registro de eventos:
+
+Seleccionar categoría (Pase, Tiro, etc.)
+
+Especificar subtipo y zona
+
+Marcar resultado (✅/❌)
+
+Visualización:
+
+Tabla de últimos 10 eventos
+
+Estadísticas automáticas por equipo
+
+4.2 Flujo de Trabajo
+Configurar equipos en módulo "Plantillas"
+
+Programar partido en "Calendario"
+
+Durante el partido:
+
+Iniciar cronómetro
+
+Registrar eventos clave
+
+Monitorear estadísticas en vivo
+
+Al finalizar: Exportar reporte
+
+5. Ejemplos Prácticos
+Caso 1: Registrar un gol
+
+Minuto 35
+
+Seleccionar jugador atacante
+
+Evento: "Tiro → Dentro del área"
+
+Resultado: "✅ Exitoso"
+
+Comentario: "Remate al ángulo inferior"
+
+Caso 2: Tarjeta amarilla
+
+Minuto 68
+
+Seleccionar jugador defensa
+
+Evento: "Falta → Tarjeta amarilla"
+
+Zona: "Banda derecha"
+
+6. Solución de Problemas
+Error	Solución
+No se ven jugadores	Verificar módulo Plantillas
+Docker no inicia	Revisar puerto 8501 libre
+Datos no persisten	Verificar volumen en docker-compose.yml
+7. FAQ
+¿Puedo usarlo en móvil?
+Sí, mediante GitHub Codespaces (ver apéndice B).
+
+¿Cómo exportar datos?
+Usar función "Exportar CSV" en menú lateral.
+
