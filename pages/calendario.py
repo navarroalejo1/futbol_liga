@@ -1,91 +1,76 @@
-#calendario
+# pages/calendario.py
 
 import streamlit as st
-import pandas as pd
-import sqlite3
 from datetime import datetime
-from pathlib import Path
-import os
+import utils.events as ev
 
-# Configuración de la base de datos
-DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "futbol.db"
-os.makedirs(DB_PATH.parent, exist_ok=True)
+def app():
+    st.title("Calendario de partidos")
+    """
+    Paso 2: Configurar el calendario de partidos para el evento activo
+    """
+    st.header("📅 Paso 2: Configurar Calendario de Partidos")
 
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS partidos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fecha DATE NOT NULL,
-        hora TIME,
-        local TEXT NOT NULL,
-        visitante TEXT NOT NULL,
-        competicion TEXT,
-        lugar TEXT,
-        UNIQUE(fecha, local, visitante)
-    ''')
-    conn.commit()
-    return conn
+    # Verificar que exista un evento activo
+    event_id = st.session_state.get("evento_activo")
+    if not event_id:
+        st.error("No hay evento activo. Por favor, regresa al paso 1.")
+        return
 
-def guardar_partido(fecha, hora, local, visitante, competicion, lugar):
-    conn = init_db()
-    try:
-        conn.execute(
-            """INSERT INTO partidos (fecha, hora, local, visitante, competicion, lugar)
-            VALUES (?, ?, ?, ?, ?, ?)""",
-            (fecha, hora, local, visitante, competicion, lugar)
-        )
-        conn.commit()
-        st.success("✅ Partido añadido al calendario!")
-    except sqlite3.IntegrityError:
-        st.error("❌ Error: Este partido ya está registrado")
+    st.subheader(f"Evento activo: {event_id}")
 
-def cargar_calendario():
-    conn = init_db()
-    return pd.read_sql_query(
-        "SELECT fecha, hora, local, visitante, competicion, lugar FROM partidos ORDER BY fecha, hora",
-        conn
-    )
-
-def main():
-    st.title("📅 Calendario de Partidos")
-    st.markdown("---")
-    
-    with st.expander("➕ Añadir Nuevo Partido", expanded=True):
-        with st.form("form_partido"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fecha = st.date_input("Fecha", datetime.today())
-                hora = st.time_input("Hora", datetime.now().time())
-                local = st.text_input("Equipo Local", "Equipo A")
-            
-            with col2:
-                visitante = st.text_input("Equipo Visitante", "Equipo B")
-                competicion = st.text_input("Competición", "Liga Nacional")
-                lugar = st.text_input("Lugar del Partido", "Estadio Principal")
-            
-            if st.form_submit_button("💾 Guardar Partido"):
-                guardar_partido(fecha, hora, local, visitante, competicion, lugar)
-    
-    st.subheader("Próximos Partidos")
-    calendario = cargar_calendario()
-    if not calendario.empty:
-        st.dataframe(
-            calendario,
-            column_config={
-                "fecha": st.column_config.DateColumn("Fecha", format="DD/MM/YYYY"),
-                "hora": st.column_config.TimeColumn("Hora", format="HH:mm"),
-                "local": "Local",
-                "visitante": "Visitante",
-                "competicion": "Competición",
-                "lugar": "Lugar"
-            },
-            hide_index=True
-        )
+    # Cargar partidos existentes
+    partidos = ev.load_partidos(event_id)
+    st.markdown("### Partidos existentes")
+    if partidos:
+        st.table(partidos)
     else:
-        st.info("No hay partidos programados")
+        st.info("No hay partidos programados aún.")
 
-if __name__ == "__main__":
-    main()
+    st.markdown("---")
+    st.subheader("Agregar nuevo partido")
+
+    # Formulario de nuevo partido
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        fecha = st.date_input("Fecha del Partido")
+        hora  = st.time_input("Hora del Partido")
+    with col2:
+        local      = st.text_input("Equipo Local")
+        visitante  = st.text_input("Equipo Visitante")
+    with col3:
+        competicion = st.text_input("Competición")
+        cancha      = st.text_input("Cancha")
+
+    # Guardar partido
+    if st.button("Guardar Partido"):
+        nueva_fecha = fecha.strftime("%d/%m/%Y")
+        nueva_hora  = hora.strftime("%H:%M")
+        nuevo = {
+            "fecha":      nueva_fecha,
+            "hora":       nueva_hora,
+            "local":      local,
+            "visitante":  visitante,
+            "competicion": competicion,
+            "cancha":     cancha
+        }
+        partidos.append(nuevo)
+        ev.save_partidos(event_id, partidos)
+        st.success("Partido agregado correctamente.")
+        st.rerun()
+
+    st.markdown("---")
+    # Navegación Anterior / Siguiente
+    colA, colB = st.columns(2)
+    with colA:
+        if st.button("◀ Anterior"):
+            st.session_state["wizard_step"] = 1
+            st.rerun()
+    with colB:
+        if st.button("Siguiente ▶"):
+            if not ev.load_partidos(event_id):
+                st.error("Debes agregar al menos un partido antes de continuar.")
+            else:
+                st.session_state["partidos"] = ev.load_partidos(event_id)
+                st.session_state["wizard_step"] = 3
+                st.rerun()

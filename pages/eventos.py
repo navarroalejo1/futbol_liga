@@ -1,72 +1,70 @@
-import os
-from pathlib import Path
-import dash
-from dash import html, dcc, callback, Output, Input, State, no_update
+import streamlit as st
 import utils.events as ev
 
-# Ruta al directorio de datos
-BASE_DIR = Path(__file__).resolve().parent.parent
-EVENTS_DATA = BASE_DIR / "data" / "events"
+def app():
+    ## Título principal del paso 1
+    st.header("⚽ Paso 1: Selección / Creación de Evento")
 
-# Registrar esta página en Dash
-dash.register_page(__name__, path="/eventos", name="Eventos")
+    ## Creamos dos columnas: una para crear evento, otra para cargar existente
+    col1, col2 = st.columns([3, 2])
 
-layout = html.Div([
-    html.H3("Gestión de Eventos"),
-    html.Div([
-        dcc.Input(id="input-event-id", type="text", maxLength=7, placeholder="ID (7 caracteres)"),
-        dcc.Input(id="input-event-name", type="text", placeholder="Nombre del evento"),
-        dcc.Input(id="input-event-start", type="text", placeholder="Fecha inicio DD/MM/AAAA"),
-        dcc.Input(id="input-event-end", type="text", placeholder="Fecha fin DD/MM/AAAA"),
-        html.Button("Crear Evento", id="btn-crear-evento"),
-    ], style={"display":"flex", "gap":"10px"}),
-    html.Div(id="msg-evento", style={"marginTop":"10px"}),
-    html.Hr(),
-    html.Div([
-        dcc.Dropdown(id="dropdown-eventos", placeholder="Selecciona evento"),
-        html.Button("Cargar Evento", id="btn-cargar-evento"),
-    ], style={"display":"flex", "gap":"10px"}),
-    html.Div(id="msg-cargar-evento", style={"marginTop":"10px"}),
-    dcc.Store(id="evento-activo"),
-])
+    ## --- Columna para crear un nuevo evento ---
+    with col1:
+        ## Campos de entrada para los datos del evento
+        eid = st.text_input("ID del Evento (7 caracteres)", max_chars=7)
+        name = st.text_input("Nombre del Evento")
+        start = st.text_input("Fecha de Inicio (DD/MM/AAAA)")
+        end = st.text_input("Fecha de Fin (DD/MM/AAAA)")
 
-@callback(
-    Output("msg-evento", "children"),
-    Input("btn-crear-evento", "n_clicks"),
-    State("input-event-id", "value"),
-    State("input-event-name", "value"),
-    State("input-event-start", "value"),
-    State("input-event-end", "value"),
-    prevent_initial_call=True
-)
-def crear_evento(n, eid, name, start, end):
-    if not eid or len(eid) != 7:
-        return "El ID debe tener exactamente 7 caracteres."
-    meta = {"name": name, "start": start, "end": end}
-    try:
-        ev.init_event(eid, meta)
-        return f"Evento {eid} creado correctamente."
-    except Exception as e:
-        return f"Error al crear evento: {e}"
+        ## Botón para crear el evento
+        if st.button("Crear Evento", key="crear_evento"):
+            ## Validamos que el ID tenga exactamente 7 caracteres
+            if not eid or len(eid) != 7:
+                st.error("El ID debe tener exactamente 7 caracteres.")
+            else:
+                try:
+                    ## Llamamos a la función para inicializar el evento (guardar en disco)
+                    ev.init_event(eid, {"name": name, "start": start, "end": end})
+                    ## Guardamos el evento como activo en la sesión
+                    st.session_state["evento_activo"] = eid
+                    st.success(f"Evento {eid} creado y activado correctamente.")
+                except Exception as e:
+                    st.error(f"Error al crear evento: {e}")
 
-@callback(
-    Output("dropdown-eventos", "options"),
-    Input("msg-evento", "children"),
-)
-def actualizar_lista(_):
-    if not EVENTS_DATA.exists():
-        return []
-    ids = [p.name for p in EVENTS_DATA.iterdir() if p.is_dir()]
-    return [{"label": i, "value": i} for i in ids]
+    ## --- Columna para cargar un evento existente ---
+    with col2:
+        st.subheader("Cargar Evento Existente")
+        try:
+            ## Listamos los eventos existentes leyendo las carpetas en EVENTS_ROOT
+            eventos = sorted([p.name for p in ev.EVENTS_ROOT.iterdir() if p.is_dir()])
+        except Exception:
+            eventos = []
+        ## Selector para elegir un evento existente
+        selected = st.selectbox("Selecciona un Evento", options=eventos)
+        ## Botón para cargar el evento seleccionado
+        if st.button("Cargar Existente", key="cargar_existente"):
+            if selected:
+                ## Guardamos el evento como activo y avanzamos al paso 2
+                st.session_state["evento_activo"] = selected
+                st.session_state["wizard_step"] = 2
+                st.success(f"Evento {selected} cargado y activado.")
+                st.rerun()
+            else:
+                st.error("No hay eventos disponibles para cargar.")
 
-@callback(
-    Output("msg-cargar-evento", "children"),
-    Output("evento-activo", "data"),
-    Input("btn-cargar-evento", "n_clicks"),
-    State("dropdown-eventos", "value"),
-    prevent_initial_call=True
-)
-def cargar_evento(n, selected):
-    if not selected:
-        return "Selecciona un evento.", no_update
-    return f"Evento {selected} cargado.", {"event_id": selected}
+    ## Línea divisoria
+    st.markdown("---")
+
+    ## --- Navegación al siguiente paso ---
+    colA, colB = st.columns([1, 1])
+    with colA:
+        ## Botón para avanzar al paso 2 (calendario)
+        if st.button("Siguiente ▶", key="siguiente_evento"):
+            ## Validamos que haya un evento activo antes de avanzar
+            if not st.session_state.get("evento_activo"):
+                st.error("Debes crear o cargar un evento antes de continuar.")
+            else:
+                st.session_state["wizard_step"] = 2
+                st.rerun()
+    with colB:
+        st.write("")  ## Solo para equilibrar el diseño de columnas
