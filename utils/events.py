@@ -1,28 +1,66 @@
-# utils/events.py
-
 import json
 from pathlib import Path
+from typing import Any, Union
 
-# Base directory of the project
+# Directorio raíz del proyecto
 BASE_DIR = Path(__file__).resolve().parent.parent
-# Root para todos los eventos
+# Carpeta donde viven todos los eventos
 EVENTS_ROOT = BASE_DIR / "data" / "events"
+
+
+def get_event_dir(event_id: str) -> Path:
+    """
+    Devuelve el Path al directorio de un evento (data/events/{event_id}),
+    creándolo si no existía.
+    """
+    event_dir = EVENTS_ROOT / event_id
+    event_dir.mkdir(parents=True, exist_ok=True)
+    return event_dir
+
+
+def get_event_file(event_id: str, filename: str) -> Path:
+    """
+    Construye la ruta completa a un archivo dentro del directorio del evento.
+    """
+    event_dir = get_event_dir(event_id)
+    return event_dir / filename
+
+
+def load_json(event_id: str, filename: str) -> Union[list, dict]:
+    """
+    Lee un JSON desde data/events/{event_id}/{filename}.
+    Si el archivo no existe, devuelve [] para listas o {} para dicts según uso.
+    """
+    file_path = get_event_file(event_id, filename)
+    if file_path.exists():
+        return json.loads(file_path.read_text(encoding="utf-8"))
+    return []
+
+
+def save_json(event_id: str, filename: str, data: Any) -> None:
+    """
+    Serializa y guarda `data` como JSON en data/events/{event_id}/{filename},
+    con indentación para ser legible.
+    """
+    file_path = get_event_file(event_id, filename)
+    file_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def init_event(event_id: str, meta: dict = None) -> Path:
     """
-    Crea la carpeta del evento con ID de 7 caracteres y la estructura interna:
-      data/events/{event_id}/meta.json
-      data/events/{event_id}/partidos.json
-      data/events/{event_id}/exports/csv/
-      data/events/{event_id}/exports/pdf/
+    Crea la estructura básica de un evento:
+      - data/events/{event_id}/
+      - data/events/{event_id}/partidos.json   (lista vacía)
+      - data/events/{event_id}/meta.json       (si se pasa `meta`)
+      - data/events/{event_id}/exports/csv/
+      - data/events/{event_id}/exports/pdf/
 
     Args:
-        event_id: ID único de 7 caracteres.
-        meta: Diccionario opcional con metadata a guardar en meta.json.
+        event_id: ID de 7 caracteres.
+        meta:    Diccionario opcional con información adicional.
 
     Raises:
-        ValueError: Si el event_id no tiene exactamente 7 caracteres.
+        ValueError: si `event_id` no tiene 7 caracteres.
 
     Returns:
         Path al directorio del evento.
@@ -30,56 +68,43 @@ def init_event(event_id: str, meta: dict = None) -> Path:
     if len(event_id) != 7:
         raise ValueError("El ID de evento debe tener exactamente 7 caracteres")
 
-    event_dir = EVENTS_ROOT / event_id
-    csv_dir = event_dir / "exports" / "csv"
-    pdf_dir = event_dir / "exports" / "pdf"
+    # Crear carpetas
+    main_dir = get_event_dir(event_id)
+    (main_dir / "exports" / "csv").mkdir(parents=True, exist_ok=True)
+    (main_dir / "exports" / "pdf").mkdir(parents=True, exist_ok=True)
 
-    # Crear estructura de carpetas
-    for path in (event_dir, csv_dir, pdf_dir):
-        path.mkdir(parents=True, exist_ok=True)
-
-    # Archivos base
-    partidos_file = event_dir / "partidos.json"
-    meta_file = event_dir / "meta.json"
-
-    # Inicializar lista de partidos si no existe
-    if not partidos_file.exists():
-        partidos_file.write_text(json.dumps([], ensure_ascii=False, indent=2), encoding="utf-8")
-
-    # Guardar meta si se proporciona
+    # Inicializar archivos JSON
+    if not get_event_file(event_id, "partidos.json").exists():
+        save_json(event_id, "partidos.json", [])
     if meta is not None:
-        meta_file.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        save_json(event_id, "meta.json", meta)
 
-    return event_dir
+    return main_dir
 
 
 def load_partidos(event_id: str) -> list:
     """
-    Carga y retorna la lista de partidos desde data/events/{event_id}/partidos.json.
+    Alias para cargar data/events/{event_id}/partidos.json.
     """
-    partidos_file = EVENTS_ROOT / event_id / "partidos.json"
-    if not partidos_file.exists():
-        return []
-    return json.loads(partidos_file.read_text(encoding="utf-8"))
+    return load_json(event_id, "partidos.json")
 
 
-def save_partidos(event_id: str, partidos: list):
+def save_partidos(event_id: str, partidos: list) -> None:
     """
-    Guarda la lista de partidos en data/events/{event_id}/partidos.json.
+    Alias para guardar data/events/{event_id}/partidos.json.
     """
-    partidos_file = EVENTS_ROOT / event_id / "partidos.json"
-    partidos_file.write_text(json.dumps(partidos, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_json(event_id, "partidos.json", partidos)
 
 
 def get_csv_path(event_id: str, filename: str) -> str:
     """
-    Retorna la ruta completa para un CSV en data/events/{event_id}/exports/csv.
+    Retorna la ruta para exportar un CSV en data/events/{event_id}/exports/csv/{filename}.csv
     """
-    return str(EVENTS_ROOT / event_id / "exports" / "csv" / f"{filename}.csv")
+    return str(get_event_file(event_id, f"exports/csv/{filename}.csv"))
 
 
 def get_pdf_path(event_id: str, filename: str) -> str:
     """
-    Retorna la ruta completa para un PDF en data/events/{event_id}/exports/pdf.
+    Retorna la ruta para exportar un PDF en data/events/{event_id}/exports/pdf/{filename}.pdf
     """
-    return str(EVENTS_ROOT / event_id / "exports" / "pdf" / f"{filename}.pdf")
+    return str(get_event_file(event_id, f"exports/pdf/{filename}.pdf"))
