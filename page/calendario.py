@@ -1,5 +1,3 @@
-# pages/calendario.py
-
 import streamlit as st
 from datetime import datetime
 import json
@@ -7,7 +5,7 @@ from pathlib import Path
 
 """
     Paso 2: Configurar el calendario de partidos para el evento activo
-    """
+"""
 
 # Importamos nuestras utilidades genéricas
 from utils.events import (
@@ -17,14 +15,34 @@ from utils.events import (
 )
 
 # Nombre de archivo en el que guardamos los partidos
-PARTIDOS_FILE = "partidos.json"
-PLANTILLA_FILE = "plantilla.json"
+PARTIDOS_FILE   = "partidos.json"
+PLANTILLA_FILE  = "plantilla.json"
+
 
 def app():
     """
     Paso 2: Configurar el calendario de partidos para el evento activo
     """
     st.title("📅 Paso 2: Calendario de Partidos")
+
+    # -- Inyectar CSS para colorear solo los botones de navegación --
+    st.markdown("""
+    <style>
+      .nav-buttons .stButton>button:first-child {
+        background-color: orange !important;
+        color: white !important;
+        border: none !important;
+      }
+      .nav-buttons .stButton>button:last-child {
+        background-color: #007BFF !important;
+        color: white !important;
+        border: none !important;
+      }
+      .nav-buttons .stButton>button:hover {
+        opacity: 0.9 !important;
+      }
+    </style>
+    """, unsafe_allow_html=True)
 
     # 1) Validar que exista un evento activo en sesión
     event_id = st.session_state.get("evento_activo")
@@ -60,11 +78,28 @@ def app():
     else:
         st.session_state["partido_activo"] = None
 
+    # --- Navegación entre pasos (primera sección) ---
+    st.markdown("<div class='nav-buttons'>", unsafe_allow_html=True)
+    colA, colB = st.columns(2)
+    with colA:
+        if st.button("◀ Anterior", key="cal_prev_1"):
+            st.session_state["wizard_step"] = 1
+            st.rerun()
+    with colB:
+        if st.button("Siguiente ▶", key="cal_next_1"):
+            # No avanzar si no hay partido seleccionado
+            if not partidos or st.session_state.get("partido_activo") is None:
+                st.error("⚠️ Agrega y selecciona un partido antes de continuar.")
+            else:
+                st.session_state["partidos"]    = partidos
+                st.session_state["wizard_step"] = 3
+                st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
     st.markdown("---")
     st.subheader("➕ Agregar nuevo partido")
 
     # 4) Sugerir equipos a partir de la plantilla de jugadores
-    #    en lugar de inputs de texto libres
     plantilla_path = get_event_file(event_id, PLANTILLA_FILE)
     equipos_plantilla = []
     if plantilla_path.exists():
@@ -78,69 +113,63 @@ def app():
     # 5) Formulario de nuevo partido usando selectbox para equipos
     col1, col2, col3 = st.columns(3)
     with col1:
-        fecha = st.date_input("Fecha")
-        hora  = st.time_input("Hora")
+        fecha = st.date_input("Fecha", key="fecha_input")
+        hora  = st.time_input("Hora", key="hora_input")
     with col2:
-        # Si no tenemos plantilla, se habilitan como texto libre
         if equipos_plantilla:
-            local     = st.selectbox("Equipo Local", options=equipos_plantilla)
-            # El visitante no puede ser el mismo que el local
+            local     = st.selectbox("Equipo Local",    options=equipos_plantilla, key="local_input")
             visitante = st.selectbox(
                 "Equipo Visitante",
-                options=[e for e in equipos_plantilla if e != local]
+                options=[e for e in equipos_plantilla if e != local],
+                key="visitante_input"
             )
         else:
-            local     = st.text_input("Equipo Local")
-            visitante = st.text_input("Equipo Visitante")
+            local     = st.text_input("Equipo Local", key="local_input")
+            visitante = st.text_input("Equipo Visitante", key="visitante_input")
     with col3:
-        competicion = st.text_input("Competición")
-        cancha      = st.text_input("Cancha")
+        competicion = st.text_input("Competición", key="competicion_input")
+        cancha      = st.text_input("Cancha", key="cancha_input")
 
     # 6) Botón para guardar, con validaciones
-    if st.button("Guardar Partido"):
+    if st.button("Guardar Partido", key="guardar_partido"):
         errores = []
-        # Validar que no se inscriban equipos idénticos
         if local == visitante:
             errores.append("El local y el visitante no pueden ser el mismo equipo.")
-        # Validar que fecha y hora existan
         if not fecha or not hora:
             errores.append("Debes indicar fecha y hora del partido.")
-        # Validar campos obligatorios
         if not local.strip() or not visitante.strip():
             errores.append("Es obligatorio indicar ambos equipos.")
         if errores:
             for e in errores:
                 st.error("❌ " + e)
         else:
-            # Formatear y añadir
             nuevo = {
-                "fecha":      fecha.strftime("%d/%m/%Y"),
-                "hora":       hora.strftime("%H:%M"),
-                "local":      local.strip(),
-                "visitante":  visitante.strip(),
+                "fecha":       fecha.strftime("%d/%m/%Y"),
+                "hora":        hora.strftime("%H:%M"),
+                "local":       local.strip(),
+                "visitante":   visitante.strip(),
                 "competicion": competicion.strip(),
-                "cancha":     cancha.strip()
+                "cancha":      cancha.strip()
             }
             partidos.append(nuevo)
-            # Persistir en disco
             save_json(event_id, PARTIDOS_FILE, partidos)
             st.success("✔️ Partido agregado con éxito.")
-            # Recargar para actualizar tabla/selector
             st.rerun()
 
     st.markdown("---")
-    # 7) Navegación entre pasos
+    # --- Navegación entre pasos (segunda sección) ---
+    st.markdown("<div class='nav-buttons'>", unsafe_allow_html=True)
     colA, colB = st.columns(2)
     with colA:
-        if st.button("◀ Anterior"):
+        if st.button("◀ Anterior", key="cal_prev_2"):
             st.session_state["wizard_step"] = 1
             st.rerun()
     with colB:
-        if st.button("Siguiente ▶"):
-            # No avanzar si no hay partido seleccionado
+        if st.button("Siguiente ▶", key="cal_next_2"):
             if not partidos or st.session_state.get("partido_activo") is None:
                 st.error("⚠️ Agrega y selecciona un partido antes de continuar.")
             else:
-                st.session_state["partidos"] = partidos
+                st.session_state["partidos"]    = partidos
                 st.session_state["wizard_step"] = 3
                 st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)

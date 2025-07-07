@@ -1,9 +1,12 @@
 import streamlit as st
 from pathlib import Path
-import pages.eventos as eventos
-import pages.calendario as calendario
-import pages.planillas as planillas
-import pages.partido_en_vivo as partido_en_vivo
+
+# Importamos nuestras utilidades genéricas
+import page.eventos as eventos
+import page.calendario as calendario
+import page.planillas as planillas
+import page.alineacion as alineacion
+import page.partido_en_vivo as partido_en_vivo
 
 st.set_page_config(
     page_title="Fútbol Analytics Pro",
@@ -17,7 +20,8 @@ steps = {
     1: ("🎟 Evento", eventos.app),
     2: ("📅 Calendario", calendario.app),
     3: ("👥 Plantillas", planillas.app),
-    4: ("⏱ Partido En Vivo", partido_en_vivo.app)
+    4: ("📋 Alineaciones", alineacion.app),
+    5: ("⏱ Partido En Vivo", partido_en_vivo.app)
 }
 
 ## Inicializamos wizard_step si no existe

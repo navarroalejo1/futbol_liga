@@ -1,4 +1,4 @@
-# pages/planillas.py
+# page/planillas.py
 
 import streamlit as st
 import json
