@@ -1,180 +1,226 @@
-# page/planillas.py
+# pages/planillas.py
 
 import streamlit as st
-import json
-from pathlib import Path
-
+import pandas as pd
+import importlib
+from utils.events import load_json, save_json
 from utils.constants import POSICIONES
-from utils.events import get_event_file, load_json, save_json
 
-# Nombres de archivos JSON
+# ───────────────────────────────────────────────────────────────
+# Compatibilidad rerun en distintas versiones de Streamlit
+# ───────────────────────────────────────────────────────────────
+try:
+    rerun = st.experimental_rerun
+except AttributeError:
+    try:
+        script_req = importlib.import_module("streamlit.runtime.scriptrunner.script_requests")
+        rerun = script_req.request_rerun
+    except ImportError:
+        rerun = lambda: None
+
+# ───────────────────────────────────────────────────────────────
+# Archivos JSON dentro de cada carpeta de evento
+# ───────────────────────────────────────────────────────────────
 PLANTILLA_FILE = "plantilla.json"
 PARTIDOS_FILE  = "partidos.json"
 
 def app():
-    """
-    Paso 3: Gestión de plantillas de jugadores para el evento activo.
-    - Muestra las plantillas de Local y Visitante por separado.
-    - Permite eliminar cualquier jugador de la plantilla del partido.
-    - Permite añadir nuevos jugadores con validaciones avanzadas.
-    """
-    st.title("👥 Paso 3: Gestión de Plantillas")
+    st.set_page_config(page_title="👥 Paso 3: Gestión de Planillas", layout="wide")
+    st.header("👥 Paso 3: Gestión de Planillas")
 
-    # 1) Validar evento activo
+    # 1) Contexto
     event_id = st.session_state.get("evento_activo")
+    partido  = st.session_state.get("partido_activo")
     if not event_id:
-        st.error("❌ No hay evento activo. Vuelve al Paso 1 para crear o cargar uno.")
+        st.warning("⚠️ Selecciona primero un evento en el Paso 1.")
+        return
+    if not partido:
+        st.warning("⚠️ Selecciona primero un partido en el Paso 2.")
         return
 
-    # 2) Rutas a JSON de plantilla y partidos
-    plantilla_path = get_event_file(event_id, PLANTILLA_FILE)
-    partidos_path  = get_event_file(event_id, PARTIDOS_FILE)
-
-    # 3) Cargar la lista completa de jugadores
-    plantilla = load_json(event_id, PLANTILLA_FILE)
-
-    # --- Mostrar partido activo y filtrar jugadores ---
-    partido = st.session_state.get("partido_activo")
-    if partido:
-        st.markdown(f"### Partido activo: **{partido['local']} vs {partido['visitante']}**")
-        # Normalizamos a minúsculas para comparar
-        equipos_partido = [
-            partido['local'].strip(),
-            partido['visitante'].strip()
-        ]
-        equipos_lower = [e.lower() for e in equipos_partido]
-
-        # Filtramos todos los jugadores que pertenecen a los equipos de este partido
-        plantilla_filtrada = [
-            j for j in plantilla
-            if j['equipo'].strip().lower() in equipos_lower
-        ]
-
-        # 3a) Separar y ordenar por dorsal
-        plantilla_local = sorted(
-            [j for j in plantilla_filtrada if j['equipo'].strip().lower() == equipos_lower[0]],
-            key=lambda x: x['dorsal']
-        )
-        plantilla_visitante = sorted(
-            [j for j in plantilla_filtrada if j['equipo'].strip().lower() == equipos_lower[1]],
-            key=lambda x: x['dorsal']
-        )
-    else:
-        st.warning("No hay partido activo seleccionado. Selecciona un partido en el Paso 2.")
-        plantilla_filtrada   = []
-        plantilla_local      = []
-        plantilla_visitante  = []
-        equipos_partido      = []
-
-    # --- Mostrar planillas en paralelo ---
-    st.subheader("📋 Jugadores en plantilla")
-    col_local, col_visitante = st.columns(2)
-    with col_local:
-        st.markdown(f"#### {equipos_partido[0] if equipos_partido else 'Equipo Local'}")
-        if plantilla_local:
-            st.table(plantilla_local)
-        else:
-            st.info("Sin jugadores.")
-    with col_visitante:
-        st.markdown(f"#### {equipos_partido[1] if equipos_partido else 'Equipo Visitante'}")
-        if plantilla_visitante:
-            st.table(plantilla_visitante)
-        else:
-            st.info("Sin jugadores.")
-
-    # --- Eliminar jugador de la plantilla filtrada ---
-    if plantilla_filtrada:
-        idx_borrar = st.selectbox(
-            "Selecciona un jugador para eliminar:",
-            options=list(range(len(plantilla_filtrada))),
-            format_func=lambda i: f"{plantilla_filtrada[i]['nombre']} ({plantilla_filtrada[i]['equipo']})",
-            key="idx_borrar"
-        )
-        if st.button("🗑️ Eliminar jugador seleccionado"):
-            jugador = plantilla_filtrada[idx_borrar]
-            # Encontrar índice real en la lista original
-            idx_real = next(i for i, j in enumerate(plantilla) if j == jugador)
-            plantilla.pop(idx_real)
-            save_json(event_id, PLANTILLA_FILE, plantilla)
-            st.success("✔️ Jugador eliminado.")
-            st.rerun()
-    else:
-        st.info("Aún no se han agregado jugadores para este partido.")
-
+    # 2) Datos del partido
+    local   = partido["local"]
+    visita  = partido["visitante"]
+    fecha   = partido.get("fecha","-")
+    hora    = partido.get("hora","-")
+    competi = partido.get("competicion","-")
+    cancha  = partido.get("cancha","-")
+    st.subheader(f"🏟️ {local} vs {visita} — {fecha} {hora}")
+    st.markdown(f"**Competición:** {competi}   |   **Cancha:** {cancha}")
     st.markdown("---")
-    st.subheader("➕ Agregar nuevo jugador")
 
-    # 4) Formulario para agregar nuevos jugadores
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        nombre = st.text_input("Nombre del Jugador", key="in_nombre")
-        dorsal = st.text_input("Dorsal", key="in_dorsal")
-    with col2:
-        posicion = st.selectbox(
-            "Posición", options=POSICIONES,
-            help="Selecciona la posición del jugador",
-            key="in_posicion"
-        )
-    with col3:
-        equipo = st.selectbox(
-            "Equipo",
-            options=equipos_partido,
-            help="Selecciona el equipo al que pertenece el jugador",
-            key="in_equipo"
-        )
+    # 3) Carga de JSON
+    plantilla     = load_json(event_id, PLANTILLA_FILE) or []
+    partidos_list = load_json(event_id, PARTIDOS_FILE)  or []
 
-    if st.button("Añadir Jugador"):
-        errores = []
-        # Validación nombre
-        if not nombre.strip():
-            errores.append("El nombre es obligatorio.")
-        # Validación dorsal
-        if not dorsal.isdigit():
-            errores.append("El dorsal debe ser un número entero.")
-        else:
-            dorsal_int = int(dorsal)
-            # Asegurar unicidad dentro del equipo
-            dorsales_equipo = {
-                j['dorsal']
-                for j in plantilla_filtrada
-                if j['equipo'].strip().lower() == equipo.strip().lower()
-            }
-            if dorsal_int in dorsales_equipo:
-                errores.append(f"El dorsal {dorsal_int} ya está en uso en {equipo}.")
-        # Validación posición
-        if posicion not in POSICIONES:
-            errores.append("Debes seleccionar una posición válida.")
-        # Validación equipo
-        if not equipo or equipo not in equipos_partido:
-            errores.append("Debes seleccionar un equipo válido para este partido.")
-
-        if errores:
-            st.error("\n".join(f"❌ {e}" for e in errores))
-        else:
-            nuevo = {
-                "nombre":   nombre.strip(),
-                "dorsal":   dorsal_int,
-                "posicion": posicion,
-                "equipo":   equipo.strip()
-            }
-            plantilla.append(nuevo)
-            save_json(event_id, PLANTILLA_FILE, plantilla)
-            st.success(f"✔️ Jugador {nombre.strip()} agregado.")
-            st.rerun()
-
-    # -----------------------------------------------
-    # 5) Navegación del wizard (Anterior / Siguiente)
-    # -----------------------------------------------
-    st.markdown("---")
-    prev_col, next_col = st.columns(2)
-    with prev_col:
-        if st.button("◀ Anterior"):
-            st.session_state["wizard_step"] = 2
-            st.rerun()
-    with next_col:
-        if st.button("Siguiente ▶"):
-            if not plantilla_filtrada:
-                st.error("⚠️ Agrega al menos un jugador para este partido antes de continuar.")
+    # 4) Agregar jugador
+    st.subheader("➕ Agregar nuevo jugador a plantilla")
+    with st.form("form_add_player", clear_on_submit=True):
+        c1, c2, c3, c4, c5 = st.columns([4,1,2,2,1])
+        with c1:
+            new_name = st.text_input("Nombre completo")
+        with c2:
+            new_dorsal = st.number_input("Dorsal", min_value=1, max_value=99, step=1)
+        with c3:
+            new_pos = st.selectbox("Posición", options=POSICIONES)
+        with c4:
+            new_team = st.selectbox("Equipo", options=[local, visita])
+        with c5:
+            submitted = st.form_submit_button("Agregar")
+        if submitted:
+            errs=[]
+            if not new_name.strip():
+                errs.append("El nombre es obligatorio.")
+            if any(j["dorsal"]==new_dorsal and j["equipo"]==new_team for j in plantilla):
+                errs.append(f"El dorsal {new_dorsal} ya existe en {new_team}.")
+            if errs:
+                for e in errs: st.error(f"❌ {e}")
             else:
-                st.session_state["wizard_step"] = 4
-                st.rerun()
+                plantilla.append({
+                    "nombre": new_name.strip(),
+                    "dorsal": new_dorsal,
+                    "posicion": new_pos,
+                    "equipo": new_team
+                })
+                save_json(event_id, PLANTILLA_FILE, plantilla)
+                st.success(f"✔️ Jugador {new_name.strip()} agregado.")
+                rerun()
+
+    st.markdown("---")
+
+    # 5) Modificar jugador
+    st.subheader("✏️ Modificar jugador existente")
+    for equipo in (local, visita):
+        st.markdown(f"**{equipo}**")
+        jug_eq = [j for j in plantilla if j["equipo"]==equipo]
+        if not jug_eq:
+            st.info("ℹ️ No hay jugadores en plantilla para este equipo.")
+            continue
+
+        idx = st.selectbox(
+            f"Selecciona para editar ({equipo})",
+            options=list(range(len(jug_eq))),
+            format_func=lambda i, eq=equipo: f"J{jug_eq[i]['dorsal']} – {jug_eq[i]['nombre']}",
+            key=f"mod_idx_{equipo}"
+        )
+        jugador = jug_eq[idx]
+        col1, col2, col3 = st.columns([4,1,2])
+        with col1:
+            mod_name = st.text_input("Nombre", value=jugador["nombre"], key=f"mod_name_{equipo}")
+        with col2:
+            mod_dorsal = st.number_input("Dorsal", value=jugador["dorsal"], min_value=1, max_value=99, key=f"mod_dorsal_{equipo}")
+        with col3:
+            mod_pos = st.selectbox("Posición", POSICIONES, index=POSICIONES.index(jugador["posicion"]), key=f"mod_pos_{equipo}")
+        if st.button(f"💾 Guardar cambios ({equipo})", key=f"mod_btn_{equipo}"):
+            otros = {j["dorsal"] for j in plantilla if j is not jugador and j["equipo"]==equipo}
+            if mod_dorsal in otros:
+                st.error(f"❌ Dorsal {mod_dorsal} ya existe en {equipo}.")
+            else:
+                jugador.update({"nombre":mod_name.strip(),"dorsal":mod_dorsal,"posicion":mod_pos})
+                save_json(event_id, PLANTILLA_FILE, plantilla)
+                st.success("✔️ Jugador modificado.")
+                rerun()
+
+    st.markdown("---")
+
+    # 6) Localizar partido en partidos.json
+    idx_p = next((
+        i for i,p in enumerate(partidos_list)
+        if p.get("local")==local and p.get("visitante")==visita
+           and p.get("fecha")==fecha and p.get("hora")==hora
+    ), None)
+    if idx_p is None:
+        st.error("❌ Partido no encontrado en el calendario (Paso 2).")
+        return
+    partido_sel = partidos_list[idx_p]
+    partido_sel.setdefault("titulares",{})
+    partido_sel.setdefault("banquillo",{})
+
+    # 7) Selección de Titulares
+    st.subheader("✅ Selección de Titulares (max 11)")
+    for equipo in (local, visita):
+        st.markdown(f"**{equipo}**")
+        jug_eq = [j for j in plantilla if j["equipo"]==equipo]
+        opciones = [f"J{j['dorsal']} – {j['nombre']} ({j['posicion']})" for j in jug_eq]
+        guard = partido_sel["titulares"].get(equipo,[])
+        default = [o for o in opciones if int(o.split(" – ")[0][1:]) in guard]
+
+        sel = st.multiselect(f"Titulares {equipo}", opciones, default, key=f"tit_{equipo}")
+        if len(sel)>11:
+            st.warning("⚠️ Máximo 11 titulares.")
+        dors_sel = [int(o.split(" – ")[0][1:]) for o in sel]
+        partido_sel["titulares"][equipo]=dors_sel
+
+        df_eq = pd.DataFrame([{
+            "Dorsal":j["dorsal"],
+            "Nombre":j["nombre"],
+            "Posición":j["posicion"],
+            "Titular": (j["dorsal"] in dors_sel)
+        } for j in jug_eq])
+        st.dataframe(df_eq, use_container_width=True)
+        st.markdown("---")
+
+    # 8) Selección de Suplentes
+    st.subheader("🏋️ Suplentes (Banquillo)")
+    for equipo in (local, visita):
+        st.markdown(f"**{equipo}**")
+        jug_eq = [j for j in plantilla if j["equipo"]==equipo]
+        opciones = [f"J{j['dorsal']} – {j['nombre']} ({j['posicion']})" for j in jug_eq]
+        tit_guard = partido_sel["titulares"].get(equipo,[])
+        opts_bank = [o for o in opciones if int(o.split(" – ")[0][1:]) not in tit_guard]
+        ban_guard = partido_sel["banquillo"].get(equipo,[])
+        default_bank = [o for o in opts_bank if int(o.split(" – ")[0][1:]) in ban_guard]
+
+        sel_b = st.multiselect(f"Suplentes {equipo}", opts_bank, default_bank, key=f"ban_{equipo}")
+        dors_b = [int(o.split(" – ")[0][1:]) for o in sel_b]
+        partido_sel["banquillo"][equipo]=dors_b
+
+        df_b = pd.DataFrame([{
+            "Dorsal":j["dorsal"],
+            "Nombre":j["nombre"],
+            "Posición":j["posicion"],
+            "Suplente": (j["dorsal"] in dors_b)
+        } for j in jug_eq])
+        st.dataframe(df_b, use_container_width=True)
+        st.markdown("---")
+
+    # 9) Seleccionar equipo a guardar
+    st.subheader("💾 Guardar planilla por equipo")
+    equipo_guardar = st.selectbox("¿Qué equipo guardas ahora?", [local, visita], key="planilla_team")
+
+    # 10) Botón Siguiente ▶ que valida sólo el equipo elegido
+    if st.button("Siguiente ▶"):
+        dors_sel = partido_sel["titulares"].get(equipo_guardar, [])
+        if len(dors_sel) < 11:
+            st.error(f"❌ {equipo_guardar} tiene {len(dors_sel)} titulares (deben ser 11).")
+        else:
+            # Guardar todo el partido (incluye ambos equipos)
+            partidos_list[idx_p] = partido_sel
+            save_json(event_id, PARTIDOS_FILE, partidos_list)
+            st.success(f"✔️ Planilla de {equipo_guardar} guardada.")
+            st.session_state["wizard_step"] = 4
+            rerun()
+
+    # 11) Resumen final
+    st.markdown("---")
+    st.subheader("📝 Resumen de Plantilla")
+    resumen=[]
+    for equipo in (local, visita):
+        for j in plantilla:
+            rol = (
+                "Titular" if j["dorsal"] in partido_sel["titulares"].get(equipo,[]) else
+                "Suplente" if j["dorsal"] in partido_sel["banquillo"].get(equipo,[]) else
+                "Reserva"
+            )
+            if j["equipo"]==equipo:
+                resumen.append({
+                    "Equipo":equipo,
+                    "Dorsal":j["dorsal"],
+                    "Nombre":j["nombre"],
+                    "Posición":j["posicion"],
+                    "Rol":rol
+                })
+    df_res = pd.DataFrame(resumen).sort_values(["Equipo","Dorsal"]).reset_index(drop=True)
+    st.table(df_res)
+
+   
