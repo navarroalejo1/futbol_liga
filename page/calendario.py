@@ -14,6 +14,17 @@ def app():
     st.title("📅 Paso 2: Calendario de Partidos")
 
     # --- Validar evento activo ---
+    # Aumentar el tamaño de la letra usando CSS en Streamlit
+    st.markdown(
+        """
+        <style>
+        .stApp {
+            font-size: 20px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
     event_id = st.session_state.get("evento_activo")
     if not event_id:
         st.error("❌ No hay evento activo. Regresa al Paso 1 para crear o cargar uno.")
@@ -63,7 +74,7 @@ def app():
             partidos = [p for p in partidos if p["id"] != partido_id]
             save_json(event_id, PARTIDOS_FILE, partidos)
             st.success("✔️ Partido eliminado.")
-            st.experimental_rerun()
+            st.rerun()
     else:
         st.session_state["partido_activo"] = None
 
@@ -116,7 +127,7 @@ def app():
             partidos.append(nuevo)
             save_json(event_id, PARTIDOS_FILE, partidos)
             st.success("✔️ Partido agregado con éxito.")
-            st.experimental_rerun()
+            st.rerun()
 
     st.markdown("---")
     # --- Navegación al siguiente paso ---
@@ -124,11 +135,11 @@ def app():
     with colA:
         if st.button("◀ Anterior", key="cal_prev"):
             st.session_state["wizard_step"] = 1
-            st.experimental_rerun()
+            st.rerun()
     with colB:
         if st.button("Siguiente ▶", key="cal_next"):
             if not partidos or st.session_state.get("partido_activo") is None:
                 st.error("⚠️ Agrega y selecciona un partido antes de continuar.")
             else:
                 st.session_state["wizard_step"] = 3
-                st.experimental_rerun()
+                st.rerun()

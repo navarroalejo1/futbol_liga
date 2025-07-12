@@ -40,11 +40,12 @@ def registrar_evento(team, dorsal, name, tiempo, periodo, categoria, accion, det
     st.success(f"✅ {team} • J{dorsal} {name} • {categoria}: {accion}{suf} @ {tiempo}")
 
 def app():
+    # Solo paso 5
     if st.session_state.get("wizard_step") != 5:
         return
 
     # ───────────────────────────────────────────────────────────
-    # Configuración visual de la página
+    # Page config + CSS ultra-compacto
     # ───────────────────────────────────────────────────────────
     st.set_page_config(page_title="⚽ Paso 5 – Partido en Vivo", layout="wide")
     st.markdown("""
@@ -64,16 +65,18 @@ def app():
   }
   .stMarkdown hr { margin:0.2rem 0 !important; border-color:#ddd !important; }
   .stColumns { gap:0.2rem !important; }
+  /* Colores por sección */
   .ofensiva .stButton>button { background:#007bff !important; color:#fff !important; }
   .defensiva .stButton>button { background:#28a745 !important; color:#fff !important; }
   .especial  .stButton>button { background:#6610f2 !important; color:#fff !important; }
+  /* Selección de dorsal */
   .titular-btn  { background:#198754 !important; color:#fff !important; }
   .suplente-btn { background:#ffc107 !important; color:#000 !important; }
 </style>
 """, unsafe_allow_html=True)
 
     # ───────────────────────────────────────────────────────────
-    # Verificación de contexto
+    # Contexto de evento y partido
     # ───────────────────────────────────────────────────────────
     ev_id   = st.session_state.get("evento_activo")
     partido = st.session_state.get("partido_activo")
@@ -82,9 +85,11 @@ def app():
         return
     st.session_state.event_id = ev_id
 
+    # unique match ID y fichero de log
     mid = partido.get("id") or f"{partido['local']}_{partido['visitante']}_{partido.get('fecha','')}_{partido.get('hora','')}"
     st.session_state.match_log_file = f"{mid}_events.json"
 
+    # si cambiamos de partido, (re)inicializamos
     if st.session_state.get("current_mid") != mid:
         st.session_state.current_mid  = mid
         st.session_state.events_log   = load_json(ev_id, st.session_state.match_log_file) or []
@@ -93,7 +98,7 @@ def app():
         st.session_state.elapsed      = 0.0
 
     # ───────────────────────────────────────────────────────────
-    # Cronómetro
+    # Cronómetro automático
     # ───────────────────────────────────────────────────────────
     elapsed = st.session_state.elapsed + (
         (datetime.now() - st.session_state.start_time).total_seconds()
@@ -102,6 +107,9 @@ def app():
     m, s = divmod(int(elapsed), 60)
     tiempo_str = f"{m:02d}:{s:02d}"
 
+    # ───────────────────────────────────────────────────────────
+    # Cabecera + controles
+    # ───────────────────────────────────────────────────────────
     local, visita = partido["local"], partido["visitante"]
     comp  = partido.get("competicion","–")
     cancha= partido.get("cancha","–")
@@ -110,7 +118,7 @@ def app():
         st.markdown(f"**🏟️ {local} vs {visita}**  |  Competición: {comp}  |  Cancha: {cancha}")
     with c2:
         if not st.session_state.running:
-            if st.button("▶", key="start"):
+            if st.button("▶", key="start"): 
                 st.session_state.running    = True
                 st.session_state.start_time = datetime.now()
         else:
@@ -131,66 +139,50 @@ def app():
         time.sleep(1); rerun()
 
     # ───────────────────────────────────────────────────────────
-    # Selección de jugador (ordenada y visual)
+    # Selección de jugador (Titulares / Suplentes)
     # ───────────────────────────────────────────────────────────
     st.subheader("🏷️ Selección de Jugador")
     team = st.radio("", [local, visita], horizontal=True, key="pv_team")
     plantilla = load_json(ev_id, "plantilla.json") or []
-
-    titulares = sorted(
-        [j for j in plantilla if j["equipo"] == team and j.get("tipo", "Titular") == "Titular"],
-        key=lambda j: j["dorsal"]
-    )
-    suplentes = sorted(
-        [j for j in plantilla if j["equipo"] == team and j.get("tipo", "Titular") == "Suplente"],
-        key=lambda j: j["dorsal"]
-    )
-
-    sel = st.session_state.get("dorsal_sel")
+    titulares = [j for j in plantilla if j["equipo"]==team and j.get("tipo","Titular")=="Titular"]
+    suplentes = [j for j in plantilla if j["equipo"]==team and j.get("tipo","Titular")=="Suplente"]
+    sel  = st.session_state.get("dorsal_sel")
     name = st.session_state.get("name_sel")
 
     if titulares:
-        st.markdown("### 🟢 Titulares")
+        st.markdown("**Titulares:**")
         cols = st.columns(len(titulares), gap="small")
         for col, j in zip(cols, titulares):
-            if col.button(str(j["dorsal"]), key=f"tit_{j['dorsal']}"):
-                st.session_state.dorsal_sel = j["dorsal"]
-                st.session_state.name_sel = j["nombre"]
+            if col.button(str(j["dorsal"]), key=f"d_{j['dorsal']}"):
+                st.session_state.dorsal_sel = j["dorsal"]; st.session_state.name_sel = j["nombre"]
             if sel == j["dorsal"]:
                 col.markdown(f"<div class='titular-btn'>{j['dorsal']}</div>", unsafe_allow_html=True)
 
     if suplentes:
-        st.markdown("### 🟡 Suplentes")
+        st.markdown("**Suplentes:**")
         cols = st.columns(len(suplentes), gap="small")
         for col, j in zip(cols, suplentes):
-            if col.button(str(j["dorsal"]), key=f"sup_{j['dorsal']}"):
-                st.session_state.dorsal_sel = j["dorsal"]
-                st.session_state.name_sel = j["nombre"]
+            if col.button(str(j["dorsal"]), key=f"d_{j['dorsal']}_s"):
+                st.session_state.dorsal_sel = j["dorsal"]; st.session_state.name_sel = j["nombre"]
             if sel == j["dorsal"]:
                 col.markdown(f"<div class='suplente-btn'>{j['dorsal']}</div>", unsafe_allow_html=True)
 
-    if st.session_state.get("dorsal_sel") and st.session_state.get("name_sel"):
-        st.markdown(
-            f"""<div style='background-color:#f0f2f6;padding:0.5rem 1rem;border-radius:8px;margin-top:1rem;'>
-            🎯 Jugador seleccionado: <strong>#{st.session_state.dorsal_sel} {st.session_state.name_sel}</strong>
-            </div>""",
-            unsafe_allow_html=True
-        )
-
     st.markdown("---")
+    if not sel or not name:
+        st.warning("Selecciona primero un dorsal.")
+        return
 
     # ───────────────────────────────────────────────────────────
-    # ACCIONES
+    # ACCIONES: filas de 8 botones coloreados
     # ───────────────────────────────────────────────────────────
     acciones = {
       "Ofensiva": (
-         ["P_ÉXITO","P_DESVÍO","P_FALLO","CENTRO","REG-ÉXITO","REG-FALLO",
-          "FALTA_REC", "DRIBLING", "CABECEO","DUELO_OF","GOL","TIRO_DIR",
-          "TIRO_DESV","TIRO_LIBRE","TIRO_ESQ", "SAQUE_LAT"],
+         ["P_ÉXITO","P_DESVÍO","P_FALLO","CENTRO","REG-ÉXITO","REG-FALLO","F_RECIB","DRIBLING",
+          "CABECEO","DUELO_OF","GOL","TIRO_DIR","TIRO_DESV","TIRO_FUERA"],
          "ofensiva"
       ),
       "Defensiva": (
-         ["INTERCEPCIÓN","DESPEJE","DUELO_DF","ROBO", "PRESION_BL",
+         ["INTERCEPCIÓN","DESPEJE","DUELO_DF","ROBO",
           "FALTA","TARJETA AMARILLA","TARJETA ROJA","ARQ_ATRAP"],
          "defensiva"
       ),
@@ -202,6 +194,7 @@ def app():
     for cat, (lista, css_class) in acciones.items():
         st.subheader(("⚽" if cat=="Ofensiva" else "🛡️" if cat=="Defensiva" else "⭐") + f" {cat}")
         st.markdown(f"<div class='{css_class}'>", unsafe_allow_html=True)
+        # chunk de 8 en 8
         chunk = 8
         for i in range(0, len(lista), chunk):
             row = lista[i:i+chunk]
@@ -212,7 +205,7 @@ def app():
         st.markdown("</div>", unsafe_allow_html=True)
 
     # ───────────────────────────────────────────────────────────
-    # Log
+    # Log invertido + edición
     # ───────────────────────────────────────────────────────────
     st.markdown("---")
     st.subheader("📋 Registro de eventos")
@@ -223,7 +216,9 @@ def app():
         idx = st.number_input("Índice a editar (0 = más reciente)", 0, len(df_rev)-1, key="idx_ev")
         ev_sel = df_rev.iloc[idx].to_dict()
         with st.expander("✏️ Editar/Eliminar"):
-            edited = {k: st.text_input(k, value=str(v), key=f"edit_{k}") for k, v in ev_sel.items()}
+            edited = {}
+            for k, v in ev_sel.items():
+                edited[k] = st.text_input(k, value=str(v), key=f"edit_{k}")
             c1, c2, c3 = st.columns(3, gap="small")
             with c1:
                 if st.button("💾 Guardar", key="save_ev"):
@@ -262,3 +257,4 @@ def app():
         if st.button("🔄 Reset completo"):
             st.session_state.running = False; st.session_state.elapsed = 0.0; st.session_state.start_time = None
             st.success("Reiniciado"); rerun()
+
